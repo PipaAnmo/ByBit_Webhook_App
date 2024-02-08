@@ -29,6 +29,7 @@ EMAIL_PASSWORD = "qgxx rjux yvnp svim"
 ###### BYBIT API DETAILS #######
 #############################
 ACCOUNT_CATEGORY = "linear"
+ORDER_TYPE = "Market"
 TESTNET = True
 BYBIT_API_KEY = "RZ73KwoTw8NmYjhXl2"
 BYBIT_API_SECRET = "c9nbQM327HDKS0i101QBAozbUV2O7zelyA1R"
@@ -62,7 +63,7 @@ def send_email(error_message):
     server.login(SENDER_EMAIL, EMAIL_PASSWORD)
 
     message = f"""\
-Subject: IG trading Script
+Subject: IG trading Script: Bybit
 
 {error_message}"""
 
@@ -74,162 +75,63 @@ Subject: IG trading Script
     print("[+] EMAIL HAS BEEN SENT")
     server.quit()
 
-def create_order(access_token, order_data):
+def create_order(client:HTTP, order_data):
     order_data = [d.strip() for d in order_data.split(' ')]
-    epic = order_data[1]
-    direction = order_data[0].lower()
-    direction = "SELL" if direction == "sell" or direction  == "long" else "BUY"
+    symbol = order_data[1].replace("-", "").replace("/", "").replace("\\", "").strip()
+    direction = "Sell" if order_data[0].lower() == "sell" else "Buy"
     size = "".join([d for d in order_data[2] if d.isdigit() or d in ",."])
 
-    logger.info(f"[I] PLACING A {direction} ORDER OF {size} FOR {epic}")
-    print(f"[I] PLACING A {direction} ORDER OF {size} FOR {epic}")
+    logger.info(f"[I] PLACING A {direction} ORDER OF {size} FOR {symbol}")
+    print(f"[I] PLACING A {direction} ORDER OF {size} FOR {symbol}")
 
-    payload = {
-        "currencyCode" : "USD",
-        "direction" : direction,
-        "guaranteedStop": False,
-        "epic": epic,
-        "orderType" : "MARKET",
-        "size" : size,
-        "timeInForce" : "EXECUTE_AND_ELIMINATE",
-        "trailingStop" : False,
-        "trailingStopIncrement" : None,
-        "expiry" : "-",
-        "forceOpen": False
-    }
+    try:
+        client.switch_position_mode(category=ACCOUNT_CATEGORY, symbol="BTCUSDT", mode=0)
+    except:
+        pass
 
-    headers = AUTH_HEADERS.copy()
-    headers["Authorization"] = f'Bearer {access_token}'
-    headers["Version"] = "2"
-
-    resp = requests.post(CREATE_ORDER_URL, data=json.dumps(payload), headers=headers)
-    logging.info(f"CREATE ORDER RESP:- {resp.text}")
-    if resp.status_code == 200:
-        data = resp.json()
-        if "dealReference" in data:
-            logger.info(f"[+] ORDER HAS BEEN CREATED WITH REF ID:- {data['dealReference']}")
-            print(f"[+] ORDER HAS BEEN CREATED WITH REF ID:- {data['dealReference']}")
-            time.sleep(2)
-            check, status, reason = check_deal_status(access_token, data['dealReference'])
-            if check:
-                return f"ORDER CREATED STATUS: {status} | REASON: {reason} | REF ID: {data['dealReference']}"
-            else:
-                logger.info(f"[!] ORDER NOT  CREATED {status} | REASON: {reason} | REF ID: {data['dealReference']}")
-                print(f"[!] ORDER COULD BNOT E CREATED {status} | REASON: {reason} | REF ID: {data['dealReference']}")
-                return f"ORDER COULD NOT BE CREATED STATUS: {status} | REASON: {reason} | REF ID: {data['dealReference']}"
+    try:
+        order = client.place_order(category=ACCOUNT_CATEGORY, symbol=symbol, side=direction, orderType=ORDER_TYPE, qty=size)
+        if order["retCode"] == 0:
+            order_id = order["result"]["orderId"]
+            logger.info(f"[+] ORDER PLACE WITH ORDER ID: {order_id}")
+            print(f"[+] ORDER PLACE WITH ORDER ID: {order_id}")
+            return f"[+] ORDER PLACE WITH ORDER ID: {order_id}"
         else:
-            logger.info(f"[!] ORDER COULD NOT BE CREATED: {resp.text}")
-            print(f"[!] ORDER COULD NOT BE CREATED: {resp.text}")
-            return f"ORDER COULD NOT BE NOT CREATED: {resp.text}"
-    else:
-        logger.info(f"[!] ORDER COULDNOT  BE CREATED: {resp.text}")
-        print(f"[!] ORDER COULD NOT BE CREATED: {resp.text}")
-        return f"ORDER COULD NOT BE CREATED: {resp.text}"
+            logger.info(f"[!] COULD NOT PLACE AN ORDER: {order}")
+            print(f"[!] COULD NOT PLACE AN ORDER: {order}")
+            return f"[!] COULD NOT PLACE AN ORDER: {order}"
+    except Exception as e:
+        logger.info(f"[!] COULD NOT PLACE AN ORDER: {e}")
+        print(f"[!] COULD NOT PLACE AN ORDER: {e}")
+        return f"[!] COULD NOT PLACE AN ORDER"
 
 
-def close_order(access_token, order_data):
+def close_order(client:HTTP, order_data):
     order_data = [d.strip() for d in order_data.split(' ')]
-    epic = order_data[1]
-    logger.info(f"[I] CLOSING AN ORDER FOR {epic}")
-    print(f"[I] CLOSING AN ORDER FOR {epic}")
+    symbol = order_data[1].replace("-", "").replace("/", "").replace("\\", "").strip()
+    logger.info(f"[I] CLOSING AN ORDER FOR {symbol}")
+    print(f"[I] CLOSING AN ORDER FOR {symbol}")
 
-    headers = AUTH_HEADERS.copy()
-    headers["Authorization"] = f'Bearer {access_token}'
-    headers["Version"] = "1"
-
-    resp = requests.get(GET_ORDERS_URL, headers=headers)
-    logging.info(f"CLOSE ORDER RESP:- {resp.text}")
-    if resp.status_code == 200:
-        positions = resp.json()["positions"]
-        closed_pos_count = 0
-        logger.info(f"[I] THERE ARE {len(positions)} OPEN POSITION WILL FIND POSITION TO CLOSE FOR {epic}")
-        print(f"[I] THERE ARE {len(positions)} OPEN POSITION WILL FIND POSITION TO CLOSE FOR {epic}")
-        closing_size = 0
+    result = client.get_positions(category=ACCOUNT_CATEGORY, symbol=symbol)
+    if result["retCode"] == 0:
+        positions = result["result"]["list"]
+        logger.info(f"[I] THERE ARE {len(positions)} OPEN POSITION WILL FIND POSITION TO CLOSE FOR {symbol}")
+        print(f"[I] THERE ARE {len(positions)} OPEN POSITION WILL FIND POSITION TO CLOSE FOR {symbol}")
         for position in positions:
-            if position['market']['epic'] == epic:
-                closing_size = str(position['position']['dealSize'])
-                close_pos_direction = "BUY" if position['position']['direction'] == 'SELL' else "SELL"
-                print(f"{closing_size = }, {close_pos_direction = }")
-                payload = {
-                    "dealId": position['position']['dealId'],
-                    "direction": close_pos_direction,
-                    "size": closing_size,
-                    "orderType": "MARKET",
-                    "expiry": "-",
-                }
+            close_size = str(position['size'])
+            close_pos_direction = "Sell" if position['side'] == 'Buy' else "Buy"
+            print(f"[I] CLOSING A POSITION SIZE OF {close_size} FOR SYMBOL: {symbol} SIDE: {close_pos_direction}")
+            order = client.place_order(category=ACCOUNT_CATEGORY, symbol=symbol, side=close_pos_direction, orderType=ORDER_TYPE, qty=close_size)
+            print(order)
 
-                headers["_method"] = "DELETE"
-                resp = requests.post(CLOSE_ORDER_URL, headers=headers, data=json.dumps(payload))
-                if resp.status_code == 200:
-                    data = resp.json()
-                    if "dealReference" in data:
-                        closed_pos_count+=1
-                        logger.info(f"[+] ORDER HAS BEEN CLOSED WITH REF ID:- {data['dealReference']}")
-                        print(f"[+] ORDER HAS BEEN CLOSED WITH REF ID:- {data['dealReference']}")
-                    else:
-                        logger.info("[!] ORDER COULD NOT  BE CLOSED")
-                        print("[!] ORDER COULD NOT BE CLOSED")
-                else:
-                    logger.info(f"[!] ORDER COULD NOT BE CLOSED:- {resp.text}")
-                    print(f"[!] ORDER COULD NOT BE CLOSED:- {resp.text}")
+        if len(positions) == 0:
+            return f"No open positions to close orders for {symbol}"
 
-        if closed_pos_count == 0:
-            return f"No open positions to close orders for {epic}"
-
-        return f"Deleted {closed_pos_count} orders for {epic}"
+        return f"Deleted orders for {symbol}"
     else:
         logger.info("[!] COULD NOT GET OPEN POSITIONS TO CLOSE")
         print("[!] COULD NOT GET OPEN POSITIONS TO CLOSE")
         return "COULD NOT GET OPEN POSITIONS TO CLOSE"
-
-
-def generate_token():
-    payload = {"identifier": "chris_hug", "password": "Abcdefg1"}
-    resp = requests.post(CREATE_SESSION_URL, json=payload, headers=REQ_HEADERS)
-    logging.info(f"GENERATE ACCESS TOKEN RESP:- {resp.text}")
-
-    if resp.status_code == 200: # This means that login was successful
-        data = resp.json()
-        if "clientId" in data:
-            logger.info("[+] LOGGED IN AND ACCESS TOKEN HAS BEEN CREATED")
-            print("[+] LOGGED IN AND ACCESS TOKEN HAS BEEN CREATED")
-            return data['oauthToken']['access_token']
-        else:
-            logger.info("[!] COULD NOT CREATE ACCESS TOKEN, PLEASE CHECK YOUR LOGIN DETAILS")
-            print("[!] COULD NOT CREATE ACCESS TOKEN, PLEASE CHECK YOUR LOGIN DETAILS")
-            return None
-    else:
-        logger.info("[!] COULD NOT CREATE ACCESS TOKEN, PLEASE CHECK YOUR LOGIN DETAIS")
-        print("[!] COULD NOT CREATE ACCESS TOKEN, PLEASE CHECK YOUR LOGIN DETAIS")
-        return None
-
-
-def check_deal_status(access_token, deal_id):
-    url = STATUS_ORDER_URL + deal_id if STATUS_ORDER_URL.endswith("/") else STATUS_ORDER_URL + "/" + deal_id
-    headers = AUTH_HEADERS.copy()
-    headers["Authorization"] = f'Bearer {access_token}'
-    headers["Version"] = "1"
-
-    logger.info(f"[I] CHECKING DEAL STATUS FOR ID:- {deal_id}")
-    print(f"[I] CHECKING DEAL STATUS FOR ID:- {deal_id}")
-    resp = requests.get(url, headers=headers)
-    logging.info(f"CHECK DEAL STATUS RESP:- {resp.text}")
-
-    if resp.status_code == 200:
-        data = resp.json()
-        reason = data["reason"]
-        status = data["status"]
-
-        logger.info(f"[+] DEAD STATUS: {status} FOR ID: {deal_id} | REASON: {reason}")
-        print(f"[+] DEAD STATUS: {status} FOR ID: {deal_id} | REASON: {reason}")
-        if status in ['OPEN', 'CLOSED', 'PARTIALLY_CLOSED', 'PARTIALLY_OPENED']:
-            return True, status, reason
-        else:
-            return False, status, reason
-    else:
-        data = resp.json()
-        logger.info(f"[!] COULD NOT GET DEAL INFO:- {data['errorCode']}")
-        print(f"[!] COULD NOT GET DEAL INFO:- {data['errorCode']}")
 
 
 @app.route('/webhook', methods=['POST', 'GET'])
@@ -238,26 +140,28 @@ def webhook():
         data = request.data.decode("utf-8").strip()
         if len(data) > 10:
             write_webhook(data)
-            access_token = generate_token()
             print("[+] GOT ALERT DATA:- ", data)
+            client = HTTP(api_key=BYBIT_API_KEY, api_secret=BYBIT_API_SECRET, testnet=TESTNET)
 
             if "close" not in data: # This means that its a buy/sell webhook request
-                order_id = create_order(access_token, data)
-                send_email(f"{data} ::: {order_id}")
-                return order_id
+                order_data = create_order(client, data)
+                send_email(f"{data} ::: {order_data}")
+                return order_data
 
             if "close" in data: # This means that its a close webhook request
-                order_data = close_order(access_token, data)
+                order_data = close_order(client, data)
                 send_email(f"{data} ::: {order_data}")
                 return order_data
 
     if request.method == "GET":
-        return {"status": 200, "msg" : "datetime updated"}
+        return {"status": 200, "msg" : datetime.utcnow()}
 
 
 if __name__ == "__main__":
-    # app.run(host="0.0.0.0", port=8080, debug=True)
-    client = HTTP(api_key=BYBIT_API_KEY, api_secret=BYBIT_API_SECRET, testnet=TESTNET)
-    print(client.get_account_info())
-    order = client.place_order(category=ACCOUNT_CATEGORY, symbol="BTCUSDT", side="Buy", orderType="Market",qty="0.1")
-    print(order)
+    app.run(host="0.0.0.0", port=8080, debug=True)
+    # # buy TICKER q=4  or sell TICKER q=2 or close TICKER 
+    # client = HTTP(api_key=BYBIT_API_KEY, api_secret=BYBIT_API_SECRET, testnet=TESTNET)
+    # # create_order(client, "sell BTC-USDT q=4")
+    # order_data = close_order(client, "close BTC-USDT")
+
+    # # print(client.get_positions(category=ACCOUNT_CATEGORY, symbol="BTCUSDT"))
