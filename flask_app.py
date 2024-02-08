@@ -28,11 +28,16 @@ EMAIL_PASSWORD = "qgxx rjux yvnp svim"
 #############################
 ###### BYBIT API DETAILS #######
 #############################
-ACCOUNT_CATEGORY = "linear"
-ORDER_TYPE = "Market"
+# IyzVWgeWdvUg3QV2VR
+# 0cSlfmPMKcvcsJYPsngCpIjVsjWDWS3Xs3b3
 TESTNET = True
-BYBIT_API_KEY = "RZ73KwoTw8NmYjhXl2"
-BYBIT_API_SECRET = "c9nbQM327HDKS0i101QBAozbUV2O7zelyA1R"
+ORDER_TYPE = "Market"
+ACCOUNT_CATEGORY = "linear"
+BYBIT_API_KEY = "IyzVWgeWdvUg3QV2VR"
+BYBIT_API_SECRET = "0cSlfmPMKcvcsJYPsngCpIjVsjWDWS3Xs3b3"
+# ABHI TEST NET API DETAILS
+# BYBIT_API_KEY = "RZ73KwoTw8NmYjhXl2"
+# BYBIT_API_SECRET = "c9nbQM327HDKS0i101QBAozbUV2O7zelyA1R"
 #############################
 #############################
 
@@ -85,7 +90,7 @@ def create_order(client:HTTP, order_data):
     print(f"[I] PLACING A {direction} ORDER OF {size} FOR {symbol}")
 
     try:
-        client.switch_position_mode(category=ACCOUNT_CATEGORY, symbol="BTCUSDT", mode=0)
+        client.switch_position_mode(category=ACCOUNT_CATEGORY, symbol=symbol, mode=0)
     except:
         pass
 
@@ -101,9 +106,10 @@ def create_order(client:HTTP, order_data):
             print(f"[!] COULD NOT PLACE AN ORDER: {order}")
             return f"[!] COULD NOT PLACE AN ORDER: {order}"
     except Exception as e:
-        logger.info(f"[!] COULD NOT PLACE AN ORDER: {e}")
-        print(f"[!] COULD NOT PLACE AN ORDER: {e}")
-        return f"[!] COULD NOT PLACE AN ORDER"
+        error = str(e).split('(ErrCode:')[0]
+        logger.info(f"[!] COULD NOT PLACE AN ORDER: {error}")
+        print(f"[!] COULD NOT PLACE AN ORDER: {error}")
+        return f"[!] COULD NOT PLACE AN ORDER {error}"
 
 
 def close_order(client:HTTP, order_data):
