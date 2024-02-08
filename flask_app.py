@@ -6,8 +6,8 @@ import logging
 import smtplib
 import requests
 from datetime import datetime
+from pybit.unified_trading import HTTP
 from flask import Flask, request, Response
-import pybit
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ORDERS_FILE = os.path.join(BASE_DIR, "orders.csv")
@@ -28,8 +28,10 @@ EMAIL_PASSWORD = "qgxx rjux yvnp svim"
 #############################
 ###### BYBIT API DETAILS #######
 #############################
-IG_ACID = "Z4VNH2"
-IG_API_KEY = "cf06f1184f9fd47c31908041bb162d1a91d2216f"
+ACCOUNT_CATEGORY = "linear"
+TESTNET = True
+BYBIT_API_KEY = "RZ73KwoTw8NmYjhXl2"
+BYBIT_API_SECRET = "c9nbQM327HDKS0i101QBAozbUV2O7zelyA1R"
 #############################
 #############################
 
@@ -254,4 +256,8 @@ def webhook():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    # app.run(host="0.0.0.0", port=8080, debug=True)
+    client = HTTP(api_key=BYBIT_API_KEY, api_secret=BYBIT_API_SECRET, testnet=TESTNET)
+    print(client.get_account_info())
+    order = client.place_order(category=ACCOUNT_CATEGORY, symbol="BTCUSDT", side="Buy", orderType="Market",qty="0.1")
+    print(order)
